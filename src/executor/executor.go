@@ -9,8 +9,12 @@ import (
 )
 
 const (
-	CHILD_ARG = "child"
+	MAP_SIZE    = 64 * 1024
+	CHILD_ARG   = "child"
+	SHM_ENV_VAR = "__AFL_SHM_ID"
 )
+
+// TODO: ctrl pipe
 
 func main() {
 	debug.SetGCPercent(50)
@@ -29,12 +33,19 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		log.Printf("child shm_id=%v\n", os.Getenv(SHM_ENV_VAR))
 
 		log.Printf("executing: %v", args)
 		if err := syscall.Exec(binary, args, os.Environ()); err != nil {
 			panic(err)
 		}
 	}
+
+	trace_bits, err := setup_shm()
+	if err != nil {
+		log.Fatalf("failed to setup shm: %v\n", err)
+	}
+	log.Printf("trace_bits=%v\n", len(trace_bits))
 
 	var args []string
 	args = append(args, os.Args[0], CHILD_ARG)
