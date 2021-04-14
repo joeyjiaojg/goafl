@@ -10,7 +10,7 @@ const (
 )
 
 const (
-	CHILD_ARG       = "child"
+	CHILD_ARG       = "afl_fork_child"
 	SHM_ENV_VAR     = "__AFL_SHM_ID"
 	AFL_DEBUG_CHILD = "AFL_DEBUG_CHILD"
 )
@@ -21,9 +21,11 @@ const (
 )
 
 var (
-	dev_null_fd int
-	fsrv_ctl_fd int
-	fsrv_st_fd  int
-	trace_bits  []byte
-	total_execs uint64
+	dev_null_fd     int
+	fsrv_ctl_fd     int
+	fsrv_st_fd      int
+	trace_bits      []byte
+	total_execs     uint64
+	child_pid       int
+	child_timed_out bool
 )
