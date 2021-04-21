@@ -1,5 +1,7 @@
 package main
 
+import "io/fs"
+
 const (
 	FAULT_NONE   = 0
 	FAULT_TMOUT  = 1
@@ -28,4 +30,9 @@ var (
 	total_execs     uint64
 	child_pid       int
 	child_timed_out bool
+)
+
+var (
+	queue	[]fs.FileInfo
+	
 )

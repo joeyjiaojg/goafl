@@ -1,15 +1,26 @@
 package main
 
 import (
+	"flag"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime/debug"
 	"syscall"
 )
 
+var (
+	flagIn = flag.String("input", "", "input directory")
+	flagOut = flag.String("output", "", "output directory")
+	flagDebug = flag.Bool("debug", false, "debug option, default false")
+	flagOutFile = flag.String("outfile", "", ".cur_input file")
+)
+
 func main() {
 	debug.SetGCPercent(50)
+	flag.Parse()
 
 	if os.Getenv(CHILD_ARG) == CHILD_ARG {
 		// Child process
@@ -27,6 +38,12 @@ func main() {
 
 	var err error
 	setup_dir_fds()
+	read_testcases()
+	setup_stdio_file()
+	check_binary()
+
+	perform_dry_run()
+
 	trace_bits, err = setup_shm()
 	if err != nil {
 		log.Fatalf("failed to setup shm: %v\n", err)
@@ -34,20 +51,50 @@ func main() {
 	log.Printf("trace_bits=%v\n", len(trace_bits))
 
 	for {
-		fuzz_one(run_args)
+		// TODO: read in buf
+		var buf []byte
+		fuzz_one(run_args, buf)
 	}
 }
 
-func fuzz_one(run_args []string) {
+func read_testcases() {
+	files, err := ioutil.ReadDir(*flagIn)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, f := range files {
+		if !f.IsDir() {
+			queue = append(queue, f)
+		}
+	}
+}
+
+func setup_stdio_file() {
+	if *flagOutFile == "" {
+		*flagOutFile = filepath.Join(*flagOut, ".cur_input")
+	}
+}
+
+func check_binary() {
+	// TODO:
+}
+
+func perform_dry_run() {
+	// TODO:
+}
+
+func fuzz_one(run_args []string, buf []byte) {
 	// TODO: mutation things
-	common_fuzz_stuff(run_args)
+	common_fuzz_stuff(run_args, buf)
 }
 
-func common_fuzz_stuff(run_args []string) {
-	run_target(run_args)
+func common_fuzz_stuff(run_args []string, buf []byte) bool {
+	run_target(run_args, buf)
+	return false
 }
 
-func run_target(run_args []string) int {
+func run_target(run_args []string, buf []byte) int {
 	child_pid = fork(run_args)
 
 	proc, err := os.FindProcess(child_pid)
