@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -44,33 +45,46 @@ func exec_child() {
 	}
 	defer segment.Detach(segment_addr)
 	inbuf := make([]byte, segment.Size)
-	n, err := segment.Read(inbuf)
+	_, err = segment.Read(inbuf)
 	if err != nil {
-		panic(err)
-	}
-	log.Printf("n=%d, input=%v\n", n, inbuf[:10])
-	inReader, inWriter, err := os.Pipe()
-	if err != nil {
-		panic(err)
-	}
-	os.Stdin = inReader
-	_, err = inWriter.Write(inbuf)
-	if err != nil {
-		inWriter.Close()
 		panic(err)
 	}
 
 	if *flagDebug {
 		log.Printf("executing: %v", os.Args)
 	}
-	if err := syscall.Exec(binary, os.Args, os.Environ()); err != nil {
+	target := exec.Command(binary, os.Args...)
+	buffer := bytes.Buffer{}
+	buffer.Write(inbuf)
+	target.Stdin = &buffer
+	target.Stdout = os.Stdout
+	target.Stderr = os.Stderr
+	err = target.Run()
+	if err != nil {
+		log.Println("exec failure")
+		var shm_id int
+		shm_str := os.Getenv(SHM_ENV_VAR)
+		if shm_str != "" {
+			shm_id, err = strconv.Atoi(shm_str)
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			panic(fmt.Errorf("env __AFL_SHM_ID is not set"))
+		}
+		segment, err := shm.Open(int(shm_id))
+		if err != nil {
+			panic(err)
+		}
+		segment_addr, err := segment.Attach()
+		if err != nil {
+			panic(err)
+		}
+		defer segment.Detach(segment_addr)
+		b := []byte{0xad, 0xde, 0xe1, 0xfe}
+		_, err = segment.Write(b)
 		panic(err)
 	}
 
-	log.Println("execv failure")
-	trace_bits[0] = 0xad
-	trace_bits[1] = 0xde
-	trace_bits[2] = 0xe1
-	trace_bits[3] = 0xfe
 	os.Exit(0)
 }
