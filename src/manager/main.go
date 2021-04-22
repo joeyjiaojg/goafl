@@ -1,10 +1,10 @@
 package main
 
 import (
-  "fmt"
-  "os"
+	"fmt"
+	"os"
 )
 
 func main() {
-  fmt.Printf("args: %v\n", os.Args)
+	fmt.Printf("args: %v\n", os.Args)
 }

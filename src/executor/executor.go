@@ -2,19 +2,22 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"syscall"
+
+	"github.com/ghetzel/shmtool/shm"
 )
 
 var (
-	flagIn = flag.String("input", "", "input directory")
-	flagOut = flag.String("output", "", "output directory")
-	flagDebug = flag.Bool("debug", false, "debug option, default false")
+	flagIn      = flag.String("input", "", "input directory")
+	flagOut     = flag.String("output", "", "output directory")
+	flagDebug   = flag.Bool("debug", false, "debug option, default false")
 	flagOutFile = flag.String("outfile", "", ".cur_input file")
 )
 
@@ -44,16 +47,45 @@ func main() {
 
 	perform_dry_run()
 
-	trace_bits, err = setup_shm()
+	segment, err = shm.Create(MAP_SIZE)
 	if err != nil {
 		log.Fatalf("failed to setup shm: %v\n", err)
 	}
-	log.Printf("trace_bits=%v\n", len(trace_bits))
+	defer segment.Destroy()
+	segment_addr, err := segment.Attach()
+	if err != nil {
+		panic(err)
+	}
+	defer segment.Detach(segment_addr)
+	os.Setenv(SHM_ENV_VAR, fmt.Sprint(segment.Id))
+
+	input_segment, err = shm.Create(INPUT_MAP_SIZE)
+	if err != nil {
+		log.Fatalf("failed to setup shm: %v\n", err)
+	}
+	defer input_segment.Destroy()
+	input_segment_addr, err := input_segment.Attach()
+	if err != nil {
+		panic(err)
+	}
+	defer input_segment.Detach(input_segment_addr)
+	os.Setenv(INPUT_SHM_ENV_VAR, fmt.Sprint(input_segment.Id))
 
 	for {
-		// TODO: read in buf
-		var buf []byte
-		fuzz_one(run_args, buf)
+		for _, q := range queue {
+			file, err := os.Open(q)
+			if err != nil {
+				panic(err)
+			}
+			_, err = io.Copy(input_segment, file)
+			if err != nil {
+				panic(err)
+			}
+			b := make([]byte, input_segment.Size)
+			input_segment.Read(b)
+			fuzz_one(run_args, b)
+			os.Exit(1)
+		}
 	}
 }
 
@@ -65,7 +97,7 @@ func read_testcases() {
 
 	for _, f := range files {
 		if !f.IsDir() {
-			queue = append(queue, f)
+			queue = append(queue, filepath.Join(*flagIn, f.Name()))
 		}
 	}
 }
@@ -138,33 +170,6 @@ func fork(run_args []string) int {
 		panic("fork() failed")
 	}
 	return pid
-}
-
-func exec_child() {
-	debug := os.Getenv(AFL_DEBUG_CHILD) != ""
-	if !debug {
-		syscall.Dup2(dev_null_fd, 1)
-		syscall.Dup2(dev_null_fd, 2)
-	}
-
-	syscall.Close(dev_null_fd)
-
-	binary, err := exec.LookPath(os.Args[0])
-	if err != nil {
-		panic(err)
-	}
-
-	log.Printf("executing: %v", os.Args)
-	if err := syscall.Exec(binary, os.Args, os.Environ()); err != nil {
-		panic(err)
-	}
-
-	log.Println("execv failure")
-	trace_bits[0] = 0xad
-	trace_bits[1] = 0xde
-	trace_bits[2] = 0xe1
-	trace_bits[3] = 0xfe
-	os.Exit(0)
 }
 
 func setup_dir_fds() {
