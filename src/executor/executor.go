@@ -138,6 +138,7 @@ func run_target(run_args []string, buf []byte) int {
 		panic(err.Error())
 	}
 	ws := state.Sys().(syscall.WaitStatus)
+	log.Printf("exit code=%d\n", ws.ExitStatus())
 	if !WIFSTOPPED(ws.ExitStatus()) {
 		child_pid = 0
 	}
@@ -151,6 +152,9 @@ func run_target(run_args []string, buf []byte) int {
 		}
 		return FAULT_CRASH
 	}
+	b := make([]byte, segment.Size)
+	segment.Read(b)
+	log.Printf("trace_bits=%v\n", b[:100])
 	return FAULT_NONE
 }
 
